@@ -1,0 +1,9 @@
+{
+  "name": "deploy-lab",
+  "version": "1.0.0",
+  "description": "Aplicação simples para estudar deploy",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  }
+}
