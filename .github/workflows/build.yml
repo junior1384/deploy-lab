@@ -25,7 +25,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Publish
-        run: dotnet publish -c Release -o ./publish
+        run: dotnet publish -c Release -o /var/www/deploy-lab
 
       - name: Copiar para pasta de destino
         run: sudo cp -r ./publish/* /var/www/deploy-lab/
