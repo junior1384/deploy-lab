@@ -27,8 +27,5 @@ jobs:
       - name: Publish
         run: dotnet publish -c Release -o /var/www/deploy-lab
 
-      - name: Copiar para pasta de destino
-        run: sudo cp -r ./publish/* /var/www/deploy-lab/
-
       - name: Reiniciar Serviço da API
-        run: sudo systemctl restart deploy-lab.service
+        run: sudo -n systemctl restart deploy-lab.service
