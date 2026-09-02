@@ -1,4 +1,4 @@
-name: Build .NET
+name: Build e Deploy .NET
 
 on:
   push:
@@ -6,17 +6,17 @@ on:
       - main
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-deploy:
+    runs-on: self-hosted
 
     steps:
-      - name: Checkout
+      - name: Checkout do código
         uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "8.0.x"
 
       - name: Restore
         run: dotnet restore
@@ -25,4 +25,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Publish
-        run: dotnet publish --no-build --configuration Release --output ./publish
+        run: dotnet publish -c Release -o /var/www/deploy-lab
+
+      - name: Reiniciar Serviço da API
+        run: sudo systemctl restart deploy-lab.service
