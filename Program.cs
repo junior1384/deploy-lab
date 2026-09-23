@@ -6,6 +6,7 @@ app.MapGet("/homolog-only", () => new
 {
     status = "OK",
     environment = "HOMOLOG",
-    message = "Esta funcionalidade existe somente na branch develop!"
+    version = "V2",
+    message = "VERSÃO NOVA - TESTE DE ROLLBACK"
 });
 app.Run();
