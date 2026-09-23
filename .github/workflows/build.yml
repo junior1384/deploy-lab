@@ -3,6 +3,7 @@ name: Build e Deploy .NET
 on:
   push:
     branches:
+      - develop
       - main
 
 jobs:
@@ -24,8 +25,38 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
-      - name: Publish
-        run: dotnet publish -c Release -o /var/www/deploy-lab
+      - name: Definir ambiente
+        id: environment
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "develop" ]; then
+            echo "environment=test" >> "$GITHUB_OUTPUT"
+            echo "deploy_path=/var/www/deploy-lab-test" >> "$GITHUB_OUTPUT"
+            echo "service=deploy-lab-test.service" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "environment=prod" >> "$GITHUB_OUTPUT"
+            echo "deploy_path=/var/www/deploy-lab-prod" >> "$GITHUB_OUTPUT"
+            echo "service=deploy-lab-prod.service" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Reiniciar Serviço da API
-        run: sudo -n systemctl restart deploy-lab.service
+      - name: Criar release
+        run: |
+          RELEASE="${GITHUB_SHA}"
+          DEPLOY_PATH="${{ steps.environment.outputs.deploy_path }}"
+
+          mkdir -p "$DEPLOY_PATH/releases/$RELEASE"
+
+          dotnet publish DeployLabApi.csproj \
+            --configuration Release \
+            --no-restore \
+            --output "$DEPLOY_PATH/releases/$RELEASE"
+
+          ln -sfn "$DEPLOY_PATH/releases/$RELEASE" "$DEPLOY_PATH/current"
+
+      - name: Reiniciar serviço
+        run: |
+          sudo -n systemctl restart "${{ steps.environment.outputs.service }}"
+
+      - name: Verificar serviço
+        run: |
+          sudo -n systemctl is-active "${{ steps.environment.outputs.service }}"
