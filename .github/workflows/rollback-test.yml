@@ -1,0 +1,113 @@
+name: Rollback TEST
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "SHA da release para voltar"
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: self-hosted
+
+    steps:
+      # ==========================================
+      # INFORMAÇÕES
+      # ==========================================
+      - name: Informações do rollback
+        run: |
+          echo "======================================"
+          echo "ROLLBACK TEST"
+          echo "======================================"
+          echo "Release escolhida: ${{ inputs.release }}"
+          echo "Servidor: $(hostname)"
+          echo "Usuário: $(whoami)"
+
+      # ==========================================
+      # VALIDAR RELEASE
+      # ==========================================
+      - name: Validar release
+        run: |
+          RELEASE="${{ inputs.release }}"
+          DEPLOY_PATH="/var/www/deploy-lab-test"
+
+          echo "======================================"
+          echo "VALIDANDO RELEASE"
+          echo "======================================"
+
+          if [ ! -d "$DEPLOY_PATH/releases/$RELEASE" ]; then
+            echo "ERRO: A release não existe:"
+            echo "$DEPLOY_PATH/releases/$RELEASE"
+            exit 1
+          fi
+
+          if [ ! -f "$DEPLOY_PATH/releases/$RELEASE/DeployLabApi.dll" ]; then
+            echo "ERRO: DeployLabApi.dll não encontrada na release."
+            exit 1
+          fi
+
+          echo "Release encontrada:"
+          echo "$DEPLOY_PATH/releases/$RELEASE"
+
+      # ==========================================
+      # MOSTRAR VERSÃO ATUAL
+      # ==========================================
+      - name: Mostrar versão atual
+        run: |
+          DEPLOY_PATH="/var/www/deploy-lab-test"
+
+          echo "======================================"
+          echo "VERSÃO ATUAL"
+          echo "======================================"
+
+          readlink -f "$DEPLOY_PATH/current"
+
+      # ==========================================
+      # ALTERAR CURRENT
+      # ==========================================
+      - name: Fazer rollback
+        run: |
+          RELEASE="${{ inputs.release }}"
+          DEPLOY_PATH="/var/www/deploy-lab-test"
+
+          echo "======================================"
+          echo "FAZENDO ROLLBACK"
+          echo "======================================"
+
+          ln -sfn "$DEPLOY_PATH/releases/$RELEASE" "$DEPLOY_PATH/current"
+
+          echo "Current agora aponta para:"
+          readlink -f "$DEPLOY_PATH/current"
+
+      # ==========================================
+      # REINICIAR SERVIÇO
+      # ==========================================
+      - name: Reiniciar TEST
+        run: |
+          echo "======================================"
+          echo "REINICIANDO TEST"
+          echo "======================================"
+
+          sudo -n systemctl restart deploy-lab-test.service
+
+      # ==========================================
+      # VERIFICAR SERVIÇO
+      # ==========================================
+      - name: Verificar TEST
+        run: |
+          echo "======================================"
+          echo "VERIFICANDO TEST"
+          echo "======================================"
+
+          sleep 3
+
+          sudo -n systemctl is-active deploy-lab-test.service
+
+          echo ""
+          echo "======================================"
+          echo "ROLLBACK CONCLUÍDO"
+          echo "======================================"
+
+          readlink -f /var/www/deploy-lab-test/current
