@@ -14,10 +14,10 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
+      - name: Verificar .NET
+        run: |
+          dotnet --version
+          which dotnet
 
       - name: Restore
         run: dotnet restore
