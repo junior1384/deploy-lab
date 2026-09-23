@@ -168,6 +168,3 @@ jobs:
           sleep 3
 
           sudo -n systemctl is-active "$SERVICE"
-
-          echo ""
-          sudo -n systemctl status "$SERVICE" --no-pager
