@@ -11,20 +11,59 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Verificar .NET
+      # ==========================================
+      # VERIFICAR RUNNER
+      # ==========================================
+      - name: Diagnosticar runner
         run: |
-          dotnet --version
-          which dotnet
+          echo "======================================"
+          echo "USUARIO DO RUNNER"
+          echo "======================================"
+          whoami
+          id
 
+          echo ""
+          echo "======================================"
+          echo "HOST"
+          echo "======================================"
+          hostname
+
+          echo ""
+          echo "======================================"
+          echo "SUDO"
+          echo "======================================"
+          which sudo
+          sudo -V | head -1
+          sudo -n -l
+
+          echo ""
+          echo "======================================"
+          echo "DOTNET"
+          echo "======================================"
+          which dotnet
+          dotnet --version
+
+      # ==========================================
+      # RESTORE
+      # ==========================================
       - name: Restore
         run: dotnet restore
 
+      # ==========================================
+      # BUILD
+      # ==========================================
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      # ==========================================
+      # DEFINIR AMBIENTE
+      # ==========================================
       - name: Definir ambiente
         id: environment
         shell: bash
@@ -33,16 +72,36 @@ jobs:
             echo "environment=test" >> "$GITHUB_OUTPUT"
             echo "deploy_path=/var/www/deploy-lab-test" >> "$GITHUB_OUTPUT"
             echo "service=deploy-lab-test.service" >> "$GITHUB_OUTPUT"
+
           elif [ "${GITHUB_REF_NAME}" = "main" ]; then
             echo "environment=prod" >> "$GITHUB_OUTPUT"
             echo "deploy_path=/var/www/deploy-lab-prod" >> "$GITHUB_OUTPUT"
             echo "service=deploy-lab-prod.service" >> "$GITHUB_OUTPUT"
+
+          else
+            echo "Branch não suportada: ${GITHUB_REF_NAME}"
+            exit 1
           fi
 
+          echo ""
+          echo "======================================"
+          echo "AMBIENTE"
+          echo "======================================"
+          echo "Branch: ${GITHUB_REF_NAME}"
+
+      # ==========================================
+      # CRIAR RELEASE
+      # ==========================================
       - name: Criar release
         run: |
           RELEASE="${GITHUB_SHA}"
           DEPLOY_PATH="${{ steps.environment.outputs.deploy_path }}"
+
+          echo "======================================"
+          echo "CRIANDO RELEASE"
+          echo "======================================"
+          echo "Release: $RELEASE"
+          echo "Diretório: $DEPLOY_PATH"
 
           mkdir -p "$DEPLOY_PATH/releases/$RELEASE"
 
@@ -53,10 +112,62 @@ jobs:
 
           ln -sfn "$DEPLOY_PATH/releases/$RELEASE" "$DEPLOY_PATH/current"
 
+          echo ""
+          echo "Current aponta para:"
+          readlink -f "$DEPLOY_PATH/current"
+
+      # ==========================================
+      # DIAGNÓSTICO DO SERVIÇO
+      # ==========================================
+      - name: Diagnosticar serviço
+        run: |
+          SERVICE="${{ steps.environment.outputs.service }}"
+
+          echo "======================================"
+          echo "SERVIÇO"
+          echo "======================================"
+          echo "Service: $SERVICE"
+
+          echo ""
+          echo "Status antes do restart:"
+          systemctl status "$SERVICE" --no-pager || true
+
+          echo ""
+          echo "Usuário atual:"
+          whoami
+
+          echo ""
+          echo "Teste sudo:"
+          sudo -n -l
+
+      # ==========================================
+      # REINICIAR SERVIÇO
+      # ==========================================
       - name: Reiniciar serviço
         run: |
-          sudo -n systemctl restart "${{ steps.environment.outputs.service }}"
+          SERVICE="${{ steps.environment.outputs.service }}"
 
+          echo "======================================"
+          echo "REINICIANDO SERVIÇO"
+          echo "======================================"
+          echo "$SERVICE"
+
+          sudo -n systemctl restart "$SERVICE"
+
+      # ==========================================
+      # VERIFICAR SERVIÇO
+      # ==========================================
       - name: Verificar serviço
         run: |
-          sudo -n systemctl is-active "${{ steps.environment.outputs.service }}"
+          SERVICE="${{ steps.environment.outputs.service }}"
+
+          echo "======================================"
+          echo "VERIFICANDO SERVIÇO"
+          echo "======================================"
+
+          sleep 3
+
+          sudo -n systemctl is-active "$SERVICE"
+
+          echo ""
+          sudo -n systemctl status "$SERVICE" --no-pager
