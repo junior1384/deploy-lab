@@ -2,88 +2,137 @@ name: Rollback TEST
 
 on:
   workflow_dispatch:
-    inputs:
-      release:
-        description: "SHA da release para voltar"
-        required: true
-        type: string
 
 jobs:
   rollback:
     runs-on: self-hosted
 
     steps:
-      # ==========================================
-      # INFORMAÇÕES
-      # ==========================================
-      - name: Informações do rollback
+      - name: Identificar release atual e anterior
+        id: versions
+        shell: bash
         run: |
-          echo "======================================"
-          echo "ROLLBACK TEST"
-          echo "======================================"
-          echo "Release escolhida: ${{ inputs.release }}"
-          echo "Servidor: $(hostname)"
-          echo "Usuário: $(whoami)"
-
-      # ==========================================
-      # VALIDAR RELEASE
-      # ==========================================
-      - name: Validar release
-        run: |
-          RELEASE="${{ inputs.release }}"
           DEPLOY_PATH="/var/www/deploy-lab-test"
+          RELEASES_PATH="$DEPLOY_PATH/releases"
 
           echo "======================================"
-          echo "VALIDANDO RELEASE"
+          echo "IDENTIFICANDO RELEASES"
           echo "======================================"
 
-          if [ ! -d "$DEPLOY_PATH/releases/$RELEASE" ]; then
-            echo "ERRO: A release não existe:"
-            echo "$DEPLOY_PATH/releases/$RELEASE"
+          CURRENT_PATH=$(readlink -f "$DEPLOY_PATH/current")
+
+          if [ -z "$CURRENT_PATH" ]; then
+            echo "ERRO: Não foi possível identificar a release atual."
             exit 1
           fi
 
-          if [ ! -f "$DEPLOY_PATH/releases/$RELEASE/DeployLabApi.dll" ]; then
-            echo "ERRO: DeployLabApi.dll não encontrada na release."
+          CURRENT_RELEASE=$(basename "$CURRENT_PATH")
+
+          echo "Release atualmente ativa:"
+          echo "$CURRENT_RELEASE"
+
+          echo ""
+          echo "Releases encontradas por ordem de deploy:"
+
+          mapfile -t RELEASES < <(
+            find "$RELEASES_PATH" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -printf '%T@ %f\n' |
+            sort -nr |
+            awk '{print $2}'
+          )
+
+          if [ "${#RELEASES[@]}" -lt 2 ]; then
+            echo "ERRO: É necessário ter pelo menos 2 releases."
             exit 1
           fi
 
-          echo "Release encontrada:"
-          echo "$DEPLOY_PATH/releases/$RELEASE"
+          echo ""
 
-      # ==========================================
-      # MOSTRAR VERSÃO ATUAL
-      # ==========================================
-      - name: Mostrar versão atual
-        run: |
-          DEPLOY_PATH="/var/www/deploy-lab-test"
+          for RELEASE in "${RELEASES[@]}"; do
+            echo "$RELEASE"
+          done
 
+          LATEST_RELEASE="${RELEASES[0]}"
+          PREVIOUS_RELEASE="${RELEASES[1]}"
+
+          echo ""
           echo "======================================"
-          echo "VERSÃO ATUAL"
+          echo "VALIDANDO ORDEM"
           echo "======================================"
 
-          readlink -f "$DEPLOY_PATH/current"
+          echo "Última release criada:"
+          echo "$LATEST_RELEASE"
 
-      # ==========================================
-      # ALTERAR CURRENT
-      # ==========================================
+          echo ""
+          echo "Release anterior:"
+          echo "$PREVIOUS_RELEASE"
+
+          echo ""
+          echo "Release atualmente ativa:"
+          echo "$CURRENT_RELEASE"
+
+          if [ "$CURRENT_RELEASE" != "$LATEST_RELEASE" ]; then
+            echo ""
+            echo "ERRO: A release atualmente ativa não é a última release criada."
+            echo ""
+            echo "Isso evita fazer rollback para uma versão errada."
+            echo ""
+            echo "Atual:"
+            echo "$CURRENT_RELEASE"
+            echo ""
+            echo "Última criada:"
+            echo "$LATEST_RELEASE"
+            exit 1
+          fi
+
+          if [ ! -d "$RELEASES_PATH/$PREVIOUS_RELEASE" ]; then
+            echo ""
+            echo "ERRO: Release anterior não encontrada:"
+            echo "$PREVIOUS_RELEASE"
+            exit 1
+          fi
+
+          if [ ! -f "$RELEASES_PATH/$PREVIOUS_RELEASE/DeployLabApi.dll" ]; then
+            echo ""
+            echo "ERRO: DeployLabApi.dll não encontrada na release anterior."
+            exit 1
+          fi
+
+          echo ""
+          echo "======================================"
+          echo "ROLLBACK IDENTIFICADO"
+          echo "======================================"
+
+          echo "Versão problemática:"
+          echo "$CURRENT_RELEASE"
+
+          echo ""
+          echo "Versão anterior:"
+          echo "$PREVIOUS_RELEASE"
+
+          echo "current_release=$CURRENT_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "previous_release=$PREVIOUS_RELEASE" >> "$GITHUB_OUTPUT"
+
       - name: Fazer rollback
         run: |
-          RELEASE="${{ inputs.release }}"
           DEPLOY_PATH="/var/www/deploy-lab-test"
+          RELEASE="${{ steps.versions.outputs.previous_release }}"
 
           echo "======================================"
           echo "FAZENDO ROLLBACK"
           echo "======================================"
 
-          ln -sfn "$DEPLOY_PATH/releases/$RELEASE" "$DEPLOY_PATH/current"
+          ln -sfn \
+            "$DEPLOY_PATH/releases/$RELEASE" \
+            "$DEPLOY_PATH/current"
 
+          echo ""
           echo "Current agora aponta para:"
           readlink -f "$DEPLOY_PATH/current"
 
-      # ==========================================
-      # REINICIAR SERVIÇO
-      # ==========================================
       - name: Reiniciar TEST
         run: |
           echo "======================================"
@@ -92,22 +141,40 @@ jobs:
 
           sudo -n systemctl restart deploy-lab-test.service
 
-      # ==========================================
-      # VERIFICAR SERVIÇO
-      # ==========================================
       - name: Verificar TEST
         run: |
+          DEPLOY_PATH="/var/www/deploy-lab-test"
+
           echo "======================================"
           echo "VERIFICANDO TEST"
           echo "======================================"
 
           sleep 3
 
-          sudo -n systemctl is-active deploy-lab-test.service
+          STATUS=$(sudo -n systemctl is-active deploy-lab-test.service)
+
+          echo "Status: $STATUS"
+
+          if [ "$STATUS" != "active" ]; then
+            echo ""
+            echo "ERRO: O serviço não iniciou corretamente."
+            exit 1
+          fi
+
+          CURRENT=$(readlink -f "$DEPLOY_PATH/current")
 
           echo ""
           echo "======================================"
           echo "ROLLBACK CONCLUÍDO"
           echo "======================================"
 
-          readlink -f /var/www/deploy-lab-test/current
+          echo "Versão problemática:"
+          echo "${{ steps.versions.outputs.current_release }}"
+
+          echo ""
+          echo "Versão restaurada:"
+          echo "${{ steps.versions.outputs.previous_release }}"
+
+          echo ""
+          echo "Current:"
+          echo "$CURRENT"
