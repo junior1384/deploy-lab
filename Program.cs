@@ -7,6 +7,6 @@ app.MapGet("/homolog-only", () => new
     status = "OK",
     environment = "HOMOLOG",
     version = "V2",
-    message = "VERSÃO NOVA - TESTE DE ROLLBACK"
+    message = "VERSÃO NOVA 2 - TESTE DE ROLLBACK"
 });
 app.Run();
